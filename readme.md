@@ -1,48 +1,174 @@
-Delivery Route Optimization
-Overview
-This project addresses the problem of optimizing a fuel-constrained delivery route in a city represented as a weighted undirected graph. Each delivery consists of a package that starts at a hub and must be delivered to a corresponding house. A single vehicle must deliver all packages while obeying the following constraints:
+# 🚚 Graph-Based Logistics Optimizer
 
-The vehicle can only deliver to a house after visiting its corresponding hub.
-The vehicle starts with a full fuel tank and can refuel only at designated fuel stations.
-The tank has a fixed maximum capacity f.
-The total fuel cost (i.e., the weight of the traveled path) should be minimized.
-Input Format
+A C++ implementation of an optimized fuel-constrained delivery route solver using graph algorithms.
+
+## 📋 Overview
+
+This project addresses the problem of optimizing delivery routes in a city represented as a weighted undirected graph. The vehicle must visit delivery hubs before delivering to their corresponding houses, all while managing limited fuel capacity and refueling constraints.
+
+### 🎯 Problem Statement
+
+- **Graph Structure**: A weighted undirected graph representing city infrastructure with nodes and edges
+- **Delivery Pairs**: Each package starts at a hub node and must be delivered to a corresponding house node
+- **Fuel Management**: 
+  - Vehicle starts with a full tank (capacity: `f`)
+  - Can only refuel at designated fuel stations
+  - Fuel cost equals edge weight
+- **Objective**: Minimize total fuel cost while satisfying all constraints
+
+### 🔒 Key Constraints
+
+✓ A house can only be delivered to after its hub is visited  
+✓ Fuel never drops below zero  
+✓ Refueling only occurs at designated fuel stations  
+✓ Tank capacity is fixed and cannot be exceeded  
+✓ Find the optimal starting hub for minimum cost  
+
+## 📊 Input Format
+
+```
 n t m k f
 h[0] h[1] ... h[n-1]        // n hub nodes
 d[0] d[1] ... d[n-1]        // n destination (house) nodes
 fs[0] fs[1] ... fs[k-1]     // k fuel station nodes
 m lines of: a b c           // bidirectional edge between node a and b with fuel cost c
-Output Format
+```
+
+### Parameters:
+- `n`: Number of delivery pairs (hubs and houses)
+- `t`: Total number of nodes in the graph
+- `m`: Number of edges
+- `k`: Number of fuel stations
+- `f`: Fuel tank capacity
+
+## 📤 Output Format
+
+```
 <length of the path>
 <space-separated sequence of node indices>
-Compilation and Execution
-Ensure the input file is located in the correct directory and the following lines in main() are updated accordingly:
+```
 
-string inp = "tc/input_.txt";
-string otp = "output/output_.txt";
-Run the main.cpp function after changing the string names.
+## 🚀 Compilation and Execution
 
-Key Components
-Algorithms Used
-Floyd-Warshall Algorithm: Computes all-pairs shortest paths and reconstructs the path using a tree matrix.
-Greedy Heuristic: For each hub, the algorithm attempts to greedily deliver all packages while managing fuel.
-Simulation: Validates the feasibility of traveling from one node to another with current fuel constraints.
-Core Functions
-reset(): Initializes all data structures and matrices.
-input(): Reads and parses the input.
-compute_floyd(): Builds shortest path matrices using the Floyd-Warshall algorithm.
-compute_closest_fuel_station(): For every node, computes the nearest fuel stations.
-generate_path(): Reconstructs the path between two nodes from the parent tree.
-support_check(): Checks if a path between two nodes is fuel-feasible.
-check_path(): Ensures the vehicle can reach a destination and still make it to a fuel station.
-solve(int start): Solves the problem for a specific starting hub and tracks the minimum cost.
-Idea
-For a current node, the function choses the closest node which is either an unvisited hub or a house whose hub has already been visited given that there is enough fuel to do so. If there is not enough fuel, the vehicle moves to the closest fuel station.
+### Step 1: Update Input/Output Paths
+Edit the file paths in `main()`:
 
-Constraints Handled
-Ensures a house is marked delivered only after its hub is visited.
-Fuel never drops below 0; refuels only at specified stations.
-Picks optimal hub to start the delivery for minimal cost.
-Output
-Prints the number of nodes in the final delivery route.
-Outputs the full route in the correct sequence.
+```cpp
+string inp = "tc/input_.txt";      // Change to your input file
+string otp = "output/output_.txt"; // Change to your output file
+```
+
+### Step 2: Compile and Run
+```bash
+g++ -o optimizer main.cpp validator.cpp
+./optimizer
+```
+
+## 🧠 Algorithm Design
+
+### Core Algorithms
+
+| Algorithm | Purpose |
+|-----------|---------|
+| **Floyd-Warshall** | Compute all-pairs shortest paths; reconstruct paths via parent tree |
+| **Greedy Heuristic** | Select nearest unvisited hub or deliverable house with fuel feasibility check |
+| **Simulation** | Validate fuel feasibility between nodes |
+
+### Algorithm Flow
+
+1. **Initialization**: Parse input and build graph
+2. **Shortest Paths**: Compute all-pairs shortest paths using Floyd-Warshall
+3. **Fuel Station Mapping**: Precompute nearest fuel station for each node
+4. **Route Selection**: For each node, greedily choose:
+   - Nearest unvisited hub, OR
+   - Nearest deliverable house (hub already visited)
+   - **Constraint**: Sufficient fuel to reach destination + nearest fuel station
+5. **Hub Selection**: Try all hubs as starting points; return minimum cost route
+
+## 📁 Project Structure
+
+```
+Graph-Based-Logistics-Optimizer/
+├── main.cpp              # Main solver implementation
+├── validator.cpp         # Solution validator
+├── readme.md            # This file
+├── tc/                  # Test cases directory
+│   └── input_*.txt      # Input test files
+└── output/              # Output directory
+    └── output_*.txt     # Generated solution files
+```
+
+## 🔧 Core Functions
+
+### Data Initialization
+- **`reset()`** - Initialize all data structures and matrices
+
+### Input/Output
+- **`input()`** - Parse and load graph from input file
+- **`generate_path(int u, int v)`** - Reconstruct path between nodes using parent tree
+
+### Graph Preprocessing
+- **`compute_floyd()`** - Build all-pairs shortest path matrices
+- **`compute_closest_fuel_station()`** - Precompute nearest fuel station for each node
+
+### Route Feasibility
+- **`support_check(int u, int v, int fuel)`** - Check if direct path is fuel-feasible
+- **`check_path(int u, int v, int fuel)`** - Verify reachability including fuel station access
+
+### Solver
+- **`solve(int start)`** - Execute greedy algorithm starting from hub `start`
+
+## 💡 Strategy
+
+The algorithm uses a **greedy nearest-neighbor approach with fuel constraints**:
+
+1. **Current Position**: Track vehicle location and remaining fuel
+2. **Next Node Selection**:
+   - Identify all reachable nodes (unvisited hubs or deliverable houses)
+   - Select the closest reachable node
+   - **If no nodes reachable**: Navigate to nearest fuel station and refuel
+3. **Fuel Management**:
+   - Before each move, verify: `fuel >= distance + buffer_to_station`
+   - Refuel to full capacity at stations
+4. **Hub Iteration**: Repeat process starting from each hub; return best solution
+
+## ✅ Constraints Handled
+
+- ✓ **Dependency Management**: Houses only marked delivered after hub visitation
+- ✓ **Fuel Safety**: Fuel never negative; refueling validated at stations only
+- ✓ **Tank Capacity**: Respects maximum fuel capacity
+- ✓ **Optimal Start**: Tests all hubs; selects starting point for minimum cost
+- ✓ **Route Completeness**: Visits all hubs and corresponding houses
+
+## 📈 Output
+
+The program generates:
+- **Path Length**: Total number of nodes in the delivery route
+- **Route Sequence**: Complete node index sequence from start to end
+
+### Example Output
+```
+15
+0 5 12 8 3 7 14 2 9 1 6 11 4 13 10
+```
+
+## 📝 Notes
+
+- Graph is **undirected** with weighted edges (fuel costs)
+- All node indices are **0-indexed**
+- Solution validity can be verified using `validator.cpp`
+- Large graphs may benefit from optimized data structures
+
+## 🤝 Contributing
+
+Feel free to extend this project with:
+- Advanced heuristics (A*, genetic algorithms)
+- Dynamic programming solutions
+- Visualization tools
+- Performance optimization
+
+---
+
+**Language**: C++  
+**Algorithm Complexity**: O(n³) for Floyd-Warshall + O(n²) for greedy selection  
+**Space Complexity**: O(n²) for distance and parent matrices
