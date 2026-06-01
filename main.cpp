@@ -1,203 +1,335 @@
-#include <bits/stdc++.h>
-using namespace std;
+#include<bits/stdc++.h>
+#include<ext/pb_ds/assoc_container.hpp>
+#include<ext/pb_ds/tree_policy.hpp>
+
+#pragma GCC optimize("Ofast,unroll-loops")
 
 #define int long long
-const int INF = 1e18;
+#define all(v) v.begin(), v.end()
+#define rall(v) v.rbegin(), v.rend()
 
-int n, t, m, k, max_endurance;
-vector<int> c, s, sz; // Caches, Camps, Safe Zones
-vector<vector<int>> adj, dist, parent;
-vector<int> is_safe_zone, cache_for_camp;
-map<int, int> camp_for_cache;
+using namespace std;
+using namespace __gnu_pbds;
 
-int best_total_cost = INF;
-vector<int> best_route;
+template<class T> using ordered_set = tree<T, null_type, less<T>, rb_tree_tag, tree_order_statistics_node_update>; // find_by_order, order_of_key
 
-void reset() {
-    c.resize(n); s.resize(n); sz.resize(k);
-    adj.assign(t + 1, vector<int>(t + 1, INF));
-    dist.assign(t + 1, vector<int>(t + 1, INF));
-    parent.assign(t + 1, vector<int>(t + 1, -1));
-    is_safe_zone.assign(t + 1, 0);
-    cache_for_camp.assign(t + 1, -1);
-    camp_for_cache.clear();
+int n, t, m, k, f; // input variables
+vector<vector<int>> v; // graph matrix
+vector<int> h, d, fs;
+
+vector<int> hash_h, hash_d, hash_fs; // hashing hubs, houses, fuel stations
+vector<vector<int>> floyd_minm; // floyd warshall matrix
+vector<vector<int>> floyd_minm_tree; // floyd warshall tree (pi), parent array basically - to compute path towards the root(ith row of matrix)
+vector<vector<int>> closest_fuel_station; // it is what its name says, closest fuel stations to ith hub
+map<int, int> mp; // maps house to hub
+
+vector<int> temp_path; // temp path to store the path from start to end
+vector<int> path; // path for a particular starting hub
+vector<int> final_path; // final path for a test case
+int temp_cost; 
+int final_cost;
+
+// resets global variables
+void reset(){
+    v.clear();
+    h.clear();
+    d.clear();
+    fs.clear();
+    v.resize(t + 1, vector<int>(t + 1, 1e18));
+    h.resize(n + 1);
+    d.resize(n + 1);
+    fs.resize(k + 1);
+
+    hash_h.clear();
+    hash_h.resize(t + 1, 0);
+    hash_d.clear();
+    hash_d.resize(t + 1, 0);
+    hash_fs.clear();
+    hash_fs.resize(t + 1, 0);
+
+    floyd_minm.clear();
+    floyd_minm.resize(t + 1, vector<int>(t + 1, 1e18));
+
+    floyd_minm_tree.clear();
+    floyd_minm_tree.resize(t + 1, vector<int>(t + 1, -1));
+
+    closest_fuel_station.clear();
+    closest_fuel_station.resize(t + 1, vector<int>(k, 1e18));
+
+    mp.clear();
+
+    final_path.clear();
+    final_cost = 1e18;
 }
 
-void input() {
-    cin >> n >> t >> m >> k >> max_endurance;
+// input function to take input
+void input(){
+    cin >> n >> t >> m >> k >> f;
+
     reset();
 
-    for (int i = 0; i < n; i++) cin >> c[i];
-    for (int i = 0; i < n; i++) {
-        cin >> s[i];
-        camp_for_cache[c[i]] = s[i];
-        cache_for_camp[s[i]] = c[i];
+    for(int i = 0; i < n; i++){
+        cin >> h[i];
+        hash_h[h[i]] = 1;
     }
-    for (int i = 0; i < k; i++) {
-        cin >> sz[i];
-        is_safe_zone[sz[i]] = 1;
+    for(int i = 0; i < n; i++){
+        cin >> d[i];
+        hash_d[d[i]] = 1;
+        mp[d[i]] = h[i];
     }
 
-    for (int i = 0; i < m; i++) {
-        int u, v, weight;
-        cin >> u >> v >> weight;
-        adj[u][v] = min(adj[u][v], weight);
-        adj[v][u] = min(adj[v][u], weight);
+    for(int i = 0; i < k; i++){
+        cin >> fs[i];
+        hash_fs[fs[i]] = 1;
     }
-    for (int i = 0; i <= t; i++) adj[i][i] = 0;
+
+    for(int i = 0; i < m; i++){
+        int a, b, c;
+        cin >> a >> b >> c;
+        v[a][b] = c;
+        v[b][a] = c;
+    }
+    for(int i = 0; i <= t; i++){
+        v[i][i] = 0;
+    }
 }
 
-void compute_floyd() {
-    for (int i = 0; i <= t; i++) {
-        for (int j = 0; j <= t; j++) {
-            dist[i][j] = adj[i][j];
-            if (adj[i][j] != INF && i != j) parent[i][j] = i;
+// computes floyd warshall matrix and pi matrix(minm tree)
+void compute_floyd(){
+    vector<vector<vector<int>>> temp(t + 1, vector<vector<int>>(t + 1, vector<int>(t + 1, 1e18)));
+    vector<vector<vector<int>>> tree(t + 1, vector<vector<int>>(t + 1, vector<int>(t + 1)));
+
+    for(int i = 0; i <= t; i++){
+        for(int j = 0; j <= t; j++){
+            temp[i][j][0] = v[i][j];
+            if(v[i][j] != 1e18){
+                tree[i][j][0] = i;
+            }
+            else{
+                tree[i][j][0] = -1;
+            }
         }
     }
-    for (int k_node = 0; k_node <= t; k_node++) {
-        for (int i = 0; i <= t; i++) {
-            for (int j = 0; j <= t; j++) {
-                if (dist[i][k_node] < INF && dist[k_node][j] < INF) {
-                    if (dist[i][j] > dist[i][k_node] + dist[k_node][j]) {
-                        dist[i][j] = dist[i][k_node] + dist[k_node][j];
-                        parent[i][j] = parent[k_node][j];
-                    }
+
+    for(int k = 1; k <= t; k++){
+        for(int i = 0; i <= t; i++){
+            for(int j = 0; j <= t; j++){
+                temp[i][j][k] = temp[i][j][k - 1];
+                tree[i][j][k] = tree[i][j][k - 1];
+                
+                if(temp[i][j][k] > temp[i][k][k - 1] + temp[k][j][k - 1]){
+                    tree[i][j][k] = tree[k][j][k - 1];
+                    temp[i][j][k] = temp[i][k][k - 1] + temp[k][j][k - 1];
                 }
             }
         }
     }
-}
 
-int compute_closest_safe_zone(int node) {
-    int min_dist = INF;
-    for (int zone : sz) {
-        min_dist = min(min_dist, dist[node][zone]);
+    for(int i = 0; i <= t; i++){
+        for(int j = 0; j <= t; j++){
+            floyd_minm[i][j] = temp[i][j][t];
+            floyd_minm_tree[i][j] = tree[i][j][t];
+        }
     }
-    return min_dist;
 }
 
-// Reconstructs path from u to v using parent matrix
-vector<int> generate_path(int u, int v) {
-    vector<int> path;
-    if (dist[u][v] == INF) return path;
-    int curr = v;
-    while (curr != u) {
-        path.push_back(curr);
-        curr = parent[u][curr];
-    }
-    reverse(path.begin(), path.end());
-    return path;
-}
-
-// Checks if we can reach the target and still have enough endurance to reach ANY safe zone
-bool check_path(int curr, int target, int current_endurance) {
-    if (dist[curr][target] > current_endurance) return false;
-    int safe_zone_dist = compute_closest_safe_zone(target);
-    return (dist[curr][target] + safe_zone_dist <= current_endurance);
-}
-
-void solve_for_start(int start_cache) {
-    vector<int> current_route;
-    int current_cost = 0;
-    int current_endurance = max_endurance;
-    int curr = start_cache;
-
-    current_route.push_back(curr);
-
-    set<int> unvisited_caches(c.begin(), c.end());
-    set<int> unreached_camps(s.begin(), s.end());
-    set<int> camps_ready; 
-
-    unvisited_caches.erase(curr);
-    camps_ready.insert(camp_for_cache[curr]);
-
-    while (!unreached_camps.empty()) {
-        int next_target = -1;
-        int min_dist_to_target = INF;
-
-        // Try to find the closest valid cache or ready camp
-        for (int candidate : unvisited_caches) {
-            if (check_path(curr, candidate, current_endurance) && dist[curr][candidate] < min_dist_to_target) {
-                min_dist_to_target = dist[curr][candidate];
-                next_target = candidate;
+// computes closest fuel stations to each hub
+void compute_closest_fuel_station(){
+    for(int i = 0; i <= t; i++){
+        vector<pair<int, int>> temp;
+        for(int j = 0; j <= t; j++){
+            if(hash_fs[j]){
+                temp.push_back({floyd_minm[i][j], j});
             }
         }
-        for (int candidate : camps_ready) {
-            if (check_path(curr, candidate, current_endurance) && dist[curr][candidate] < min_dist_to_target) {
-                min_dist_to_target = dist[curr][candidate];
-                next_target = candidate;
-            }
+        sort(all(temp));
+        for(int j = 0; j < k; j++){
+            closest_fuel_station[i][j] = temp[j].second;
         }
+    }
+}
 
-        // If no target is safely reachable, we MUST go to a safe zone
-        if (next_target == -1) {
-            int best_safe_zone = -1;
-            int min_sz_dist = INF;
-            for (int zone : sz) {
-                if (dist[curr][zone] <= current_endurance && dist[curr][zone] < min_sz_dist) {
-                    min_sz_dist = dist[curr][zone];
-                    best_safe_zone = zone;
+// generates a path from en to st (reversed because in floyd warshall, we retrieve path from a child node towards the root)
+void generate_path(int st, int en){
+    temp_path.clear();
+    int curr = st;
+    while(curr != en){
+        temp_path.push_back(curr);
+        curr = floyd_minm_tree[en][curr];
+    }
+    reverse(all(temp_path));
+}
+
+// used inside check_path, checks if a valid path exists from st to en with the given fuel and returns the fuel left at the end of path
+int support_check(int st, int en, int fuel){
+    generate_path(en, st);
+    vector<int> temp;
+    temp.push_back(st);
+    for(auto i : temp_path){
+        temp.push_back(i);
+    }
+
+    for(int i = 1; i < temp.size(); i++){
+        if(hash_fs[temp[i - 1]]){
+            fuel = f;
+        }
+        fuel -= v[temp[i - 1]][temp[i]];
+        if(fuel < 0){
+            return -1;
+        }
+    }
+
+    if(hash_fs[temp.back()]){
+        fuel = f;
+    }
+    return fuel;
+}
+
+// checks if a valid path exists from st to en with the given fuel
+int check_path(int st, int en, int fuel){
+    int x = support_check(st, en, fuel);
+    if(x == -1){
+        return 0;
+    }
+
+    x = support_check(en, closest_fuel_station[en][0], x);
+    if(x == -1){
+        return 0;
+    }
+
+    return 1;
+}
+
+// solves the problem for a particular starting hub
+void solve(int start){
+    path.clear();
+    temp_cost = 0;
+
+    set<int> hubs_left;
+    for(int i = 0; i < n; i++){
+        if(i == start) continue;
+        hubs_left.insert(h[i]);
+    }
+    int curr = h[start];
+    path.push_back(curr);
+
+    int fuel = f;
+    set<int> houses_left;
+    for(int i = 0; i < n; i++){
+        assert(d[i] != h[i]);
+        houses_left.insert(d[i]);
+    }  
+
+    while(houses_left.size()){
+        int closest = -1;
+
+        for(auto i : hubs_left){
+            if(closest == -1){
+                int x = check_path(curr, i, fuel);
+                if(x == 0){
+                    continue;
+                }
+                closest = i;
+            }
+            else{
+                int x = check_path(curr, i, fuel);
+                if(x == 0){
+                    continue;
+                }
+                if(floyd_minm[curr][i] < floyd_minm[curr][closest]){
+                    closest = i;
                 }
             }
-            if (best_safe_zone == -1) return; // Mission Failed: Stranded
-            next_target = best_safe_zone;
         }
 
-        // Move vehicle to next_target
-        current_cost += dist[curr][next_target];
-        current_endurance -= dist[curr][next_target];
-        
-        vector<int> path_segment = generate_path(curr, next_target);
-        current_route.insert(current_route.end(), path_segment.begin(), path_segment.end());
-        
-        curr = next_target;
+        for(auto i : houses_left){
+            if(hubs_left.find(mp[i]) != hubs_left.end()){
+                continue;
+            }
 
-        // Update states based on where we arrived
-        if (is_safe_zone[curr]) {
-            current_endurance = max_endurance; // Refuel / Repair
+            if(closest == -1){
+                int x = check_path(curr, i, fuel);
+                if(x == 0){
+                    continue;
+                }
+                closest = i;
+            }
+            else{
+                int x = check_path(curr, i, fuel);
+                if(x == 0){
+                    continue;
+                }
+                if(floyd_minm[curr][i] < floyd_minm[curr][closest]){
+                    closest = i;
+                }
+            }
         }
-        if (unvisited_caches.count(curr)) {
-            unvisited_caches.erase(curr);
-            camps_ready.insert(camp_for_cache[curr]); // Corresponding camp is now valid
-        }
-        if (camps_ready.count(curr)) {
-            camps_ready.erase(curr);
-            unreached_camps.erase(curr); // Delivery successful
-        }
-    }
 
-    if (current_cost < best_total_cost) {
-        best_total_cost = current_cost;
-        best_route = current_route;
+        if(closest == -1){
+            int x = check_path(curr, closest_fuel_station[curr][0], fuel);
+            if(x == 0){
+                temp_cost = 1e18;
+                return;
+            }
+
+            closest = closest_fuel_station[curr][0];
+        }
+
+        generate_path(closest, curr);
+
+        for(auto i : temp_path){
+            path.push_back(i);
+            fuel -= v[curr][i];
+            assert(fuel >= 0);
+            temp_cost += v[curr][i];
+            if(hash_h[i]){
+                hubs_left.erase(i);
+            }
+            if(hash_fs[i]){
+                fuel = f;
+            }
+            if(hash_d[i]){
+                if(hubs_left.find(mp[i]) == hubs_left.end()){
+                    houses_left.erase(i);
+                }
+            }
+            curr = i;
+        }
+
+        hubs_left.erase(closest);
+        houses_left.erase(closest);
     }
 }
 
-signed main() {
+signed main(){
+
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
 
-    // Update index for different test cases
-    string inp = "tc/input_0.txt";
-    string otp = "output/output_0.txt";
-
+    //change test case number here, make sure to enter the correct path
+    string inp = "tc/input_2.txt";
+    string otp = "output/output_2.txt";
     freopen(inp.c_str(), "r", stdin);
     freopen(otp.c_str(), "w", stdout);
-
     input();
+
     compute_floyd();
-
-    // Try starting the mission from every possible supply cache
-    for (int start_cache : c) {
-        solve_for_start(start_cache);
+    compute_closest_fuel_station();
+    
+    for(int i = 0; i < n; i++){
+        solve(i);
+        if(temp_cost < final_cost){
+            final_cost = temp_cost;
+            final_path = path;
+        }
     }
 
-    // Output strictly matching the checker's expectations
-    cout << best_total_cost << "\n";
-    cout << best_route.size() << "\n";
-    for (int node : best_route) {
-        cout << node << " ";
+    // cout << final_cost << endl;
+    cout << final_path.size() << endl;
+    for(auto i : final_path){
+        cout << i << " ";
     }
-    cout << "\n";
+    cout << endl;
 
     return 0;
 }
